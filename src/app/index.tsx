@@ -1,98 +1,292 @@
-import * as Device from 'expo-device';
-import { Platform, StyleSheet } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Accelerometer } from 'expo-sensors';
+import { useEffect, useRef, useState } from 'react';
+import {
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 
-import { AnimatedIcon } from '@/components/animated-icon';
-import { HintRow } from '@/components/hint-row';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { WebBadge } from '@/components/web-badge';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+export default function Index() {
+  const [pasos, setPasos] = useState(0);
+  const [distancia, setDistancia] = useState(0);
+  const [intensidad, setIntensidad] = useState('Detenido');
+  const [activo, setActivo] = useState(false);
 
-function getDevMenuHint() {
-  if (Platform.OS === 'web') {
-    return <ThemedText type="small">use browser devtools</ThemedText>;
-  }
-  if (Device.isDevice) {
-    return (
-      <ThemedText type="small">
-        shake device or press <ThemedText type="code">m</ThemedText> in terminal
-      </ThemedText>
-    );
-  }
-  const shortcut = Platform.OS === 'android' ? 'cmd+m (or ctrl+m)' : 'cmd+d';
+  const pasosRef = useRef(0);
+  const ultimoPaso = useRef(0);
+
+  useEffect(() => {
+    if (!activo) {
+      setIntensidad('Detenido');
+      return;
+    }
+
+    Accelerometer.setUpdateInterval(100);
+
+    const subscription = Accelerometer.addListener(({ x, y, z }) => {
+      // Calculamos la intensidad del movimiento
+      const magnitud = Math.sqrt(
+        x * x +
+        y * y +
+        z * z
+      );
+
+      // Eliminamos aproximadamente el efecto de la gravedad
+      const movimiento = Math.abs(magnitud - 1);
+
+      const ahora = Date.now();
+
+      // DETECCIÓN DE PASOS
+      if (
+        movimiento > 0.18 &&
+        ahora - ultimoPaso.current > 350
+      ) {
+        ultimoPaso.current = ahora;
+
+        pasosRef.current += 1;
+
+        setPasos(pasosRef.current);
+
+        // Distancia aproximada
+        // 1 paso = 0.75 metros
+        const metros = pasosRef.current * 0.75;
+
+        setDistancia(metros / 1000);
+      }
+
+      // DETECCIÓN DE INTENSIDAD
+      if (movimiento < 0.08) {
+        setIntensidad('Detenido');
+      } else if (movimiento < 0.30) {
+        setIntensidad('Caminando');
+      } else {
+        setIntensidad('Corriendo');
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [activo]);
+
+  // Reiniciar todos los datos
+  const reiniciar = () => {
+    pasosRef.current = 0;
+    ultimoPaso.current = 0;
+
+    setPasos(0);
+    setDistancia(0);
+    setIntensidad('Detenido');
+  };
+
   return (
-    <ThemedText type="small">
-      press <ThemedText type="code">{shortcut}</ThemedText>
-    </ThemedText>
-  );
-}
+    <View style={styles.container}>
 
-export default function HomeScreen() {
-  return (
-    <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
-        <ThemedView style={styles.heroSection}>
-          <AnimatedIcon />
-          <ThemedText type="title" style={styles.title}>
-            Welcome to&nbsp;Expo
-          </ThemedText>
-        </ThemedView>
+      {/* TÍTULO */}
+      <Text style={styles.titulo}>
+        Fitness
+      </Text>
 
-        <ThemedText type="code" style={styles.code}>
-          get started
-        </ThemedText>
+      <Text style={styles.subtitulo}>
+        Seguimiento de actividad
+      </Text>
 
-        <ThemedView type="backgroundElement" style={styles.stepContainer}>
-          <HintRow
-            title="Try editing"
-            hint={<ThemedText type="code">src/app/index.tsx</ThemedText>}
-          />
-          <HintRow title="Dev tools" hint={getDevMenuHint()} />
-          <HintRow
-            title="Fresh start"
-            hint={<ThemedText type="code">npm run reset-project</ThemedText>}
-          />
-        </ThemedView>
+      {/* PASOS */}
+      <View style={styles.tarjetaPasos}>
+        <Text style={styles.numeroPasos}>
+          {pasos}
+        </Text>
 
-        {Platform.OS === 'web' && <WebBadge />}
-      </SafeAreaView>
-    </ThemedView>
+        <Text style={styles.textoPasos}>
+          PASOS
+        </Text>
+      </View>
+
+      {/* DISTANCIA E INTENSIDAD */}
+      <View style={styles.fila}>
+
+        <View style={styles.tarjeta}>
+          <Text style={styles.valor}>
+            {distancia.toFixed(2)}
+          </Text>
+
+          <Text style={styles.etiqueta}>
+            KILÓMETROS
+          </Text>
+        </View>
+
+        <View style={styles.tarjeta}>
+          <Text style={styles.valor}>
+            {intensidad}
+          </Text>
+
+          <Text style={styles.etiqueta}>
+            INTENSIDAD
+          </Text>
+        </View>
+
+      </View>
+
+      {/* BOTÓN INICIAR / DETENER */}
+      <TouchableOpacity
+        style={[
+          styles.boton,
+          activo
+            ? styles.botonDetener
+            : styles.botonIniciar,
+        ]}
+        onPress={() => setActivo(!activo)}
+      >
+        <Text style={styles.textoBoton}>
+          {activo ? 'Detener' : 'Iniciar'}
+        </Text>
+      </TouchableOpacity>
+
+      {/* BOTÓN REINICIAR */}
+      <TouchableOpacity
+        style={styles.botonReiniciar}
+        onPress={reiniciar}
+      >
+        <Text style={styles.textoReiniciar}>
+          Reiniciar
+        </Text>
+      </TouchableOpacity>
+
+      {/* INFORMACIÓN */}
+      <Text style={styles.info}>
+        La distancia es aproximada y se calcula
+        usando 0.75 metros por paso.
+      </Text>
+
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+
   container: {
     flex: 1,
-    justifyContent: 'center',
+    backgroundColor: '#f4f6f8',
+    padding: 25,
+    paddingTop: 70,
+  },
+
+  titulo: {
+    fontSize: 36,
+    fontWeight: 'bold',
+    color: '#111',
+  },
+
+  subtitulo: {
+    fontSize: 18,
+    color: '#666',
+    marginBottom: 30,
+  },
+
+  tarjetaPasos: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 30,
+    alignItems: 'center',
+    marginBottom: 20,
+
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 5,
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+  },
+
+  numeroPasos: {
+    fontSize: 64,
+    fontWeight: 'bold',
+    color: '#111',
+  },
+
+  textoPasos: {
+    fontSize: 14,
+    color: '#777',
+    fontWeight: 'bold',
+  },
+
+  fila: {
     flexDirection: 'row',
+    gap: 15,
+    marginBottom: 30,
   },
-  safeArea: {
+
+  tarjeta: {
     flex: 1,
-    paddingHorizontal: Spacing.four,
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    padding: 25,
     alignItems: 'center',
-    gap: Spacing.three,
-    paddingBottom: BottomTabInset + Spacing.three,
-    maxWidth: MaxContentWidth,
+
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
   },
-  heroSection: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    gap: Spacing.four,
-  },
-  title: {
+
+  valor: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#111',
+    marginBottom: 8,
     textAlign: 'center',
   },
-  code: {
-    textTransform: 'uppercase',
+
+  etiqueta: {
+    fontSize: 12,
+    color: '#777',
+    fontWeight: 'bold',
+    textAlign: 'center',
   },
-  stepContainer: {
-    gap: Spacing.three,
-    alignSelf: 'stretch',
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.four,
-    borderRadius: Spacing.four,
+
+  boton: {
+    borderRadius: 15,
+    padding: 18,
+    alignItems: 'center',
+    marginBottom: 15,
   },
+
+  botonIniciar: {
+    backgroundColor: '#111',
+  },
+
+  botonDetener: {
+    backgroundColor: '#555',
+  },
+
+  textoBoton: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+
+  botonReiniciar: {
+    padding: 15,
+    alignItems: 'center',
+  },
+
+  textoReiniciar: {
+    fontSize: 16,
+    color: '#555',
+  },
+
+  info: {
+    textAlign: 'center',
+    color: '#888',
+    fontSize: 12,
+    marginTop: 15,
+  },
+
 });
